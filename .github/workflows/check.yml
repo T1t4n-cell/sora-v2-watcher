@@ -1,9 +1,9 @@
-name: Sora V2 Stock Checker
+name: Sora V2 Stock Checker (hourly)
 
 on:
   schedule:
-    - cron: "*/5 * * * *"   # alle 5 Minuten
-  workflow_dispatch:
+    - cron: "0 * * * *"   # 1x pro Stunde zur vollen Stunde (UTC)
+  workflow_dispatch:      # optional: manuell starten
 
 jobs:
   run:
@@ -20,11 +20,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run checker once (no email)
+      - name: Run checker once
         env:
           RUN_ONCE: "1"
-          # Später einfach Secret hinzufügen und Kommentar entfernen:
-          # DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          # Optional: nur bestimmte URLs prüfen:
-          # PRODUCT_URLS: ${{ secrets.PRODUCT_URLS }}
-        run: python Main.py   # oder: python main.py (je nach Dateiname!)
+        run: python Main.py   # falls deine Datei klein geschrieben ist: python main.py
