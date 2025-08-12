@@ -23,7 +23,8 @@ jobs:
       - name: Run checker once (no email)
         env:
           RUN_ONCE: "1"
-          # Optional: später, wenn gewünscht
+          # Später einfach Secret hinzufügen und Kommentar entfernen:
           # DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          # Optional: nur bestimmte URLs prüfen:
           # PRODUCT_URLS: ${{ secrets.PRODUCT_URLS }}
-        run: python Main.py   # oder: python main.py  -> je nach Dateiname!
+        run: python Main.py   # oder: python main.py (je nach Dateiname!)
