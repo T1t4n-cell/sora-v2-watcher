@@ -2,32 +2,24 @@ import os
 import time
 import json
 import random
-import smtplib
-from email.mime.text import MIMEText
 from datetime import datetime
 from typing import List
 import requests
 from bs4 import BeautifulSoup
 
-# ---------- Konfiguration über Railway Variables ----------
-PRODUCT_URLS = [u.strip() for u in os.environ.get("PRODUCT_URLS","").split(",") if u.strip()] or [
+# ---------- Konfiguration über Umgebungsvariablen ----------
+# Mehrere URLs kommasepariert in PRODUCT_URLS, sonst Standardliste:
+PRODUCT_URLS = [u.strip() for u in (os.environ.get("PRODUCT_URLS") or "").split(",") if u.strip()] or [
     "https://www.maxgaming.gg/de/kabellos/sora-v2-superlight-kabellos-gaming-maus-schwarz",
     "https://www.maxgaming.gg/de/kabellos/sora-v2-superlight-kabellos-gaming-maus-wei",
     "https://www.maxgaming.gg/de/kabellos/ninjutso-sora-v2-rosa",
 ]
-CHECK_EVERY_SECONDS = int(os.environ.get("CHECK_EVERY_SECONDS", "300"))
+CHECK_EVERY_SECONDS = int((os.environ.get("CHECK_EVERY_SECONDS") or "300").strip())
 
-# E-Mail (optional – später per Variables setzen)
-EMAIL_HOST = os.environ.get("EMAIL_HOST", "").strip()      # z.B. smtp.mail.me.com (Apple), smtp.office365.com (Outlook), mail.gmx.net
-EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
-EMAIL_USER = os.environ.get("EMAIL_USER", "").strip()
-EMAIL_PASS = os.environ.get("EMAIL_PASS", "").strip()
-EMAIL_TO   = os.environ.get("EMAIL_TO", "").strip()
+# Discord (optional, später per Secret setzen)
+DISCORD_WEBHOOK_URL = (os.environ.get("DISCORD_WEBHOOK_URL") or "").strip()
 
-# Discord (optional – später setzen)
-DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
-
-# ---------- Erkennung / HTTP ----------
+# ---------- HTTP / Heuristik ----------
 TIMEOUT = 15
 CONNECT_RETRIES = 2
 IN_STOCK_KEYWORDS = [
@@ -90,7 +82,7 @@ def looks_in_stock(html: str) -> bool:
     if text_contains_any(joined, OUT_OF_STOCK_KEYWORDS): return False
     if text_contains_any(joined, IN_STOCK_KEYWORDS): return True
 
-    # 3) Fallback: Gesamttext + Lagerbestand
+    # 3) Fallback: Gesamttext + "Lagerbestand"
     full_text = soup.get_text(separator=" ", strip=True).lower()
     if "lagerbestand" in full_text:
         try:
@@ -106,35 +98,40 @@ def looks_in_stock(html: str) -> bool:
     if in_hits > 0 and out_hits == 0: return True
     return False
 
-def send_email(subject: str, body: str):
-    if not (EMAIL_HOST and EMAIL_PORT and EMAIL_USER and EMAIL_PASS and EMAIL_TO):
-        print("[INFO] E-Mail nicht konfiguriert – nur Konsole:", subject)
-        return
-    msg = MIMEText(body, _charset="utf-8")
-    msg["Subject"] = subject
-    msg["From"] = EMAIL_USER
-    msg["To"] = EMAIL_TO
-    try:
-        with smtplib.SMTP(EMAIL_HOST, EMAIL_PORT, timeout=15) as server:
-            server.ehlo(); server.starttls(); server.login(EMAIL_USER, EMAIL_PASS)
-            server.sendmail(EMAIL_USER, [EMAIL_TO], msg.as_string())
-    except Exception as e:
-        print(f"[WARN] E-Mail-Versand fehlgeschlagen: {e}")
-
 def send_discord(msg: str):
-    url = DISCORD_WEBHOOK_URL
-    if not url: return
+    if not DISCORD_WEBHOOK_URL:
+        # Kein Webhook gesetzt -> nur in Logs ausgeben
+        print(msg, flush=True)
+        return
     try:
-        r = requests.post(url, json={"content": msg}, timeout=10)
+        r = requests.post(DISCORD_WEBHOOK_URL, json={"content": msg}, timeout=10)
         r.raise_for_status()
     except Exception as e:
-        print(f"[WARN] Discord-Webhook fehlgeschlagen: {e}")
+        print(f"[WARN] Discord-Webhook fehlgeschlagen: {e}\nNachricht wäre: {msg}", flush=True)
 
 def log(msg: str):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{ts}] {msg}", flush=True)
 
-def main():
+# -------- zwei Modi: einmaliger Lauf (für Actions) ODER Endlosschleife --------
+def run_once():
+    for url in PRODUCT_URLS:
+        try:
+            html = fetch(url)
+            in_stock = looks_in_stock(html)
+        except Exception as e:
+            log(f"⚠ Fehler beim Abruf {url}: {e}")
+            continue
+
+        if in_stock:
+            ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            msg = f"✅ IN STOCK bei MaxGaming!\n{url}\nZeit: {ts}"
+            log(f"✅ IN STOCK: {url}")
+            send_discord(msg)
+        else:
+            log(f"❌ Nicht verfügbar: {url}")
+
+def main_loop():
     already_alerted = set()
     while True:
         for url in PRODUCT_URLS:
@@ -146,20 +143,22 @@ def main():
                 continue
 
             if in_stock:
-                if url in already_alerted:
-                    log(f"✅ Bereits gemeldet (noch in Stock): {url}")
-                else:
+                if url not in already_alerted:
                     ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    subject = "Sora V2 bei MaxGaming: IN STOCK ✅"
-                    body = f"IN STOCK gefunden!\n{url}\nZeit: {ts}"
+                    msg = f"✅ IN STOCK bei MaxGaming!\n{url}\nZeit: {ts}"
                     log(f"✅ IN STOCK: {url}")
-                    send_email(subject, body)
-                    send_discord(f"{subject}\n{body}")
+                    send_discord(msg)
                     already_alerted.add(url)
+                else:
+                    log(f"✅ Bereits gemeldet (noch in Stock): {url}")
             else:
                 log(f"❌ Nicht verfügbar: {url}")
 
         time.sleep(max(30, CHECK_EVERY_SECONDS + random.randint(-15, 15)))
 
 if __name__ == "__main__":
-    main()
+    # In GitHub Actions setzen wir RUN_ONCE=1 -> nur ein Durchlauf
+    if (os.environ.get("RUN_ONCE") or "").strip() == "1":
+        run_once()
+    else:
+        main_loop()
