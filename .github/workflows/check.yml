@@ -3,7 +3,7 @@ name: Sora V2 Stock Checker
 on:
   schedule:
     - cron: "*/5 * * * *"   # alle 5 Minuten
-  workflow_dispatch:        # manuell startbar
+  workflow_dispatch:
 
 jobs:
   run:
@@ -20,13 +20,10 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run checker
-        run: python Main.py   # <- Achtung: Großes M, wie in deinem Repo!
+      - name: Run checker once (no email)
         env:
-          EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
-          EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
-          EMAIL_USER: ${{ secrets.EMAIL_USER }}
-          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
-          EMAIL_TO:   ${{ secrets.EMAIL_TO }}
-          PRODUCT_URLS: ${{ secrets.PRODUCT_URLS }}   # optional
-          CHECK_EVERY_SECONDS: "60"  # beim CI-Lauf: 60s, damit er zügig fertig wird
+          RUN_ONCE: "1"
+          # Optional: später, wenn gewünscht
+          # DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          # PRODUCT_URLS: ${{ secrets.PRODUCT_URLS }}
+        run: python Main.py   # oder: python main.py  -> je nach Dateiname!
