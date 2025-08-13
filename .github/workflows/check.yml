@@ -2,8 +2,8 @@ name: Sora V2 Stock Checker (hourly)
 
 on:
   schedule:
-    - cron: "0 * * * *"   # 1x pro Stunde zur vollen Stunde (UTC)
-  workflow_dispatch:      # optional: manuell starten
+    - cron: "0 * * * *"   # stündlich
+  workflow_dispatch:
 
 jobs:
   run:
@@ -11,16 +11,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-
       - name: Install dependencies
         run: pip install -r requirements.txt
-
       - name: Run checker once
         env:
           RUN_ONCE: "1"
-        run: python Main.py   # falls deine Datei klein geschrieben ist: python main.py
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}   # <— hinzugefügt
+          # Optional:
+          # PRODUCT_URLS: ${{ secrets.PRODUCT_URLS }}
+        run: python Main.py   # ODER: python main.py (je nach Dateiname!)
